@@ -21,7 +21,8 @@ export default {
 		if (requestJson.message.text === "/start") {
 			const data = {
 				"chat_id": requestJson.message.chat.id,
-				"text": "*WIP*\nType /gif to get a random gif from yesno.wtf",
+				"text": "*\\*WIP\\**\nType /gif to get a random gif from yesno\\.wtf",
+				"parse_mode": "MarkdownV2",
 			}
 			console.log(await sendTgMessage(data, env.TG_BOT_TOKEN));
 		}
