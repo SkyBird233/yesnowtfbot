@@ -10,6 +10,12 @@ async function sendTgMessage(data, token, method = "sendMessage") {
 	return await fetch(tgApi + method, init).then(response => response.json());
 }
 
+function commandRollIntRange(max = 6, min = 1) {
+	if (!(max = parseInt(max)) || !(min = parseInt(min))) return "Invalid command";
+	if (max < min) [max, min] = [min, max];
+	return `[${min},${max}] -> ` + (Math.floor(Math.random() * (max - min + 1)) + min);
+}
+
 export default {
 	async fetch(request, env, ctx) {
 		const yesnowtfApi = "https://yesno.wtf/api";
@@ -24,7 +30,7 @@ export default {
 			console.log("Not a message");
 			return new Response();
 		}
-		const command = requestJson.message.text.split(" ");
+		const command = requestJson.message.text.split(/\s+/);
 		console.log("Command: " + command);
 
 		if (command[0] === "/start") {
@@ -55,19 +61,7 @@ export default {
 				"chat_id": requestJson.message.chat.id,
 				"text": "",
 			}
-
-			if (command.length === 1) {
-				data.text = "[1,6] -> " + (Math.floor(Math.random() * 6) + 1);
-			}
-			else if (command.length === 2 && !isNaN(command[1])) {
-				data.text = "[1," + command[1] + "] -> " + (Math.floor(Math.random() * command[1]) + 1);
-			}
-			else if (command.length === 3 && !isNaN(command[1]) && !isNaN(command[2])) {
-				data.text = "[" + command[1] + "," + command[2] + "] -> " + (Math.floor(Math.random() * (command[2] - command[1] + 1)) + parseInt(command[1]));
-			}
-			else {
-				data.text = "Invalid command";
-			}
+			data.text = commandRollIntRange(...command.slice(1).reverse());
 
 			console.log(await sendTgMessage(data, env.TG_BOT_TOKEN));
 		}
