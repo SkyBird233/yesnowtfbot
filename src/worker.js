@@ -15,9 +15,17 @@ export default {
 		const yesnowtfApi = "https://yesno.wtf/api";
 		const requestJson = await request.json();
 
-		const yesnowtfData = await fetch(yesnowtfApi).then(response => response.json());
+		console.log("Request: " + JSON.stringify(requestJson));
 
+		const yesnowtfData = await fetch(yesnowtfApi).then(response => response.json());
+		console.log("yesnowtfData: " + JSON.stringify(yesnowtfData));
+
+		if (!Object.hasOwn(requestJson, "message")) { // edited_message / query
+			console.log("Not a message");
+			return new Response();
+		}
 		const command = requestJson.message.text.split(" ");
+		console.log("Command: " + command);
 
 		if (command[0] === "/start") {
 			const data = {
@@ -51,10 +59,10 @@ export default {
 			if (command.length === 1) {
 				data.text = "[1,6] -> " + (Math.floor(Math.random() * 6) + 1);
 			}
-			else if (command.length === 2) {
+			else if (command.length === 2 && !isNaN(command[1])) {
 				data.text = "[1," + command[1] + "] -> " + (Math.floor(Math.random() * command[1]) + 1);
 			}
-			else if (command.length === 3) {
+			else if (command.length === 3 && !isNaN(command[1]) && !isNaN(command[2])) {
 				data.text = "[" + command[1] + "," + command[2] + "] -> " + (Math.floor(Math.random() * (command[2] - command[1] + 1)) + parseInt(command[1]));
 			}
 			else {
