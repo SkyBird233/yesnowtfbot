@@ -1,3 +1,17 @@
+class YesnowtfApi {
+	apiUrl = "https://yesno.wtf/api";
+
+	async getJson(forced = false) {
+		//forced: yes / no / maybe
+		if (forced) this.apiUrl += "?force=" + forced;
+		return await fetch(this.apiUrl).then(response => response.json());
+	}
+
+	async getGif(forced = false) {
+		return (await this.getJson(forced)).image;
+	}
+}
+
 async function sendTgMessage(data, token, method = "sendMessage") {
 	const tgApi = `https://api.telegram.org/bot${token}/`;
 	const init = {
@@ -18,13 +32,10 @@ function commandRollIntRange(max = 6, min = 1) {
 
 export default {
 	async fetch(request, env, ctx) {
-		const yesnowtfApi = "https://yesno.wtf/api";
+		const yesnowtfApi = new YesnowtfApi();
 		const requestJson = await request.json();
 
 		console.log("Request: " + JSON.stringify(requestJson));
-
-		const yesnowtfData = await fetch(yesnowtfApi).then(response => response.json());
-		console.log("yesnowtfData: " + JSON.stringify(yesnowtfData));
 
 		if (!Object.hasOwn(requestJson, "message")) { // edited_message / query
 			console.log("Not a message");
@@ -44,7 +55,7 @@ export default {
 		else if (command[0] === "/gif") {
 			const data = {
 				"chat_id": requestJson.message.chat.id,
-				"animation": yesnowtfData.image,
+				"animation": yesnowtfApi.getGif(),
 			}
 			console.log(await sendTgMessage(data, env.TG_BOT_TOKEN, "sendAnimation"));
 		}
