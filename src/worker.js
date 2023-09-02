@@ -55,7 +55,7 @@ export default {
 		else if (command[0] === "/gif") {
 			const data = {
 				"chat_id": requestJson.message.chat.id,
-				"animation": yesnowtfApi.getGif(),
+				"animation": await yesnowtfApi.getGif(),
 			}
 			console.log(await sendTgMessage(data, env.TG_BOT_TOKEN, "sendAnimation"));
 		}
