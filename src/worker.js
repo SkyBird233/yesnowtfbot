@@ -12,16 +12,43 @@ class YesnowtfApi {
 	}
 }
 
-async function sendTgMessage(data, token, method = 'sendMessage') {
-	const tgApi = `https://api.telegram.org/bot${token}/`;
-	const init = {
-		method: 'POST',
-		body: JSON.stringify(data),
-		headers: {
-			'content-type': 'application/json;charset=UTF-8',
-		},
-	};
-	return await fetch(tgApi + method, init).then((response) => response.json());
+class TgApi {
+	constructor(token) {
+		this.baseUrl = `https://api.telegram.org/bot${token}/`;
+	}
+
+	getUpdateType(updateJson) {
+		// At most one of the optional parameters can be present in any given update.
+		for (const key in updateJson) if (key !== 'update_id') return key;
+	}
+
+	async sendMessage(data, method = 'sendMessage') {
+		const init = {
+			method: 'POST',
+			body: JSON.stringify(data),
+			headers: {
+				'content-type': 'application/json;charset=UTF-8',
+			},
+		};
+		return await fetch(this.baseUrl + method, init).then((response) => response.json());
+	}
+
+	async sendRegularMessage(text, chatId, parse_mode = null) {
+		const data = {
+			chat_id: chatId,
+			text: text,
+		};
+		if (parse_mode) data.parse_mode = parse_mode;
+		return await this.sendMessage(data);
+	}
+
+	async sendAnimation(animUrl, chatId) {
+		const data = {
+			chat_id: chatId,
+			animation: animUrl,
+		};
+		return await this.sendMessage(data, 'sendAnimation');
+	}
 }
 
 function commandRollIntRange(max = 6, min = 1) {
@@ -33,46 +60,31 @@ function commandRollIntRange(max = 6, min = 1) {
 export default {
 	async fetch(request, env, ctx) {
 		const yesnowtfApi = new YesnowtfApi();
+		const tgApi = new TgApi(env.TG_BOT_TOKEN);
 		const requestJson = await request.json();
 
-		console.log('Request: ' + JSON.stringify(requestJson));
+		console.log('Request: ', requestJson);
 
-		if (!Object.hasOwn(requestJson, 'message')) {
-			// edited_message / query
-			console.log('Not a message');
-			return new Response();
-		}
+		const messageType = tgApi.getUpdateType(requestJson);
+		console.log('Message type: ' + messageType);
+		if (messageType !== 'message') return new Response();
+
 		const command = requestJson.message.text.split(/\s+/);
+		const chatId = requestJson.message.chat.id;
 		console.log('Command: ' + command);
 
 		if (command[0] === '/start') {
-			const data = {
-				chat_id: requestJson.message.chat.id,
-				text: '*\\*WIP\\**\nType /gif to get a random gif from yesno\\.wtf',
-				parse_mode: 'MarkdownV2',
-			};
-			console.log(await sendTgMessage(data, env.TG_BOT_TOKEN));
+			const text = '*\\*WIP\\**\nType /gif to get a random gif from yesno\\.wtf';
+			console.log(await tgApi.sendRegularMessage(text, chatId, 'MarkdownV2'));
 		} else if (command[0] === '/gif') {
-			const data = {
-				chat_id: requestJson.message.chat.id,
-				animation: await yesnowtfApi.getGif(),
-			};
-			console.log(await sendTgMessage(data, env.TG_BOT_TOKEN, 'sendAnimation'));
+			console.log(await tgApi.sendAnimation(await yesnowtfApi.getGif(), chatId));
 		} else if (command[0] === '/help') {
-			const data = {
-				chat_id: requestJson.message.chat.id,
-				text: '*Commands:*\n/gif \\- Get a random GIF from yesno\\.wtf \\.\n/roll \\- Roll a random int in range\\. Default is \\[1,6\\], one argument to change the max value, two arguments to change min and max\\. Example: `/roll 10 20`',
-				parse_mode: 'MarkdownV2',
-			};
-			console.log(await sendTgMessage(data, env.TG_BOT_TOKEN));
+			const text =
+				'*Commands:*\n/gif \\- Get a random GIF from yesno\\.wtf \\.\n/roll \\- Roll a random int in range\\. Default is \\[1,6\\], one argument to change the max value, two arguments to change min and max\\. Example: `/roll 10 20`';
+			console.log(await tgApi.sendRegularMessage(text, chatId, 'MarkdownV2'));
 		} else if (command[0] === '/roll') {
-			const data = {
-				chat_id: requestJson.message.chat.id,
-				text: '',
-			};
-			data.text = commandRollIntRange(...command.slice(1).reverse());
-
-			console.log(await sendTgMessage(data, env.TG_BOT_TOKEN));
+			const text = commandRollIntRange(...command.slice(1).reverse());
+			console.log(await tgApi.sendRegularMessage(text, chatId));
 		}
 		return new Response();
 	},
