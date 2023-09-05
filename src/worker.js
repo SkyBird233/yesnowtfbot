@@ -57,35 +57,53 @@ function commandRollIntRange(max = 6, min = 1) {
 	return `[${min},${max}] -> ` + (Math.floor(Math.random() * (max - min + 1)) + min);
 }
 
+async function handleRegularCommand(updateJson, tgApi) {
+	let commands = {
+		gif: 'Get a random GIF from yesno\\.wtf\\. ',
+		roll:
+			'Roll a random int in range\\. ' +
+			'Default is \\[1,6\\], one argument to change the max value, two arguments to change min and max\\. ' +
+			'Example: `/roll 10 20`',
+	};
+	commands.help =
+		'*Commands:*\n' +
+		Object.keys(commands)
+			.map((key) => `/${key} \\- ${commands[key]}`)
+			.join('\n');
+
+	const yesnowtfApi = new YesnowtfApi();
+
+	const chatId = updateJson.message.chat.id;
+
+	const command = updateJson.message.text.split(/\s+/);
+	console.log('Command: ' + command);
+
+	switch (command[0]) {
+		case '/start':
+		case '/help':
+			return await tgApi.sendRegularMessage(commands.help, chatId, 'MarkdownV2');
+		case '/gif':
+			return await tgApi.sendAnimation(await yesnowtfApi.getGif(), chatId);
+		case '/roll':
+			return await tgApi.sendRegularMessage(commandRollIntRange(...command.slice(1).reverse()), chatId);
+		default:
+			return await tgApi.sendRegularMessage('Invalid command', chatId);
+	}
+}
+
 export default {
 	async fetch(request, env, ctx) {
-		const yesnowtfApi = new YesnowtfApi();
 		const tgApi = new TgApi(env.TG_BOT_TOKEN);
-		const requestJson = await request.json();
 
+		const requestJson = await request.json();
 		console.log('Request: ', requestJson);
 
 		const messageType = tgApi.getUpdateType(requestJson);
 		console.log('Message type: ' + messageType);
 		if (messageType !== 'message') return new Response();
 
-		const command = requestJson.message.text.split(/\s+/);
-		const chatId = requestJson.message.chat.id;
-		console.log('Command: ' + command);
+		console.log(await handleRegularCommand(requestJson, tgApi));
 
-		if (command[0] === '/start') {
-			const text = '*\\*WIP\\**\nType /gif to get a random gif from yesno\\.wtf';
-			console.log(await tgApi.sendRegularMessage(text, chatId, 'MarkdownV2'));
-		} else if (command[0] === '/gif') {
-			console.log(await tgApi.sendAnimation(await yesnowtfApi.getGif(), chatId));
-		} else if (command[0] === '/help') {
-			const text =
-				'*Commands:*\n/gif \\- Get a random GIF from yesno\\.wtf \\.\n/roll \\- Roll a random int in range\\. Default is \\[1,6\\], one argument to change the max value, two arguments to change min and max\\. Example: `/roll 10 20`';
-			console.log(await tgApi.sendRegularMessage(text, chatId, 'MarkdownV2'));
-		} else if (command[0] === '/roll') {
-			const text = commandRollIntRange(...command.slice(1).reverse());
-			console.log(await tgApi.sendRegularMessage(text, chatId));
-		}
 		return new Response();
 	},
 };
