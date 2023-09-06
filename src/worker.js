@@ -8,7 +8,9 @@ class YesnowtfApi {
 	}
 
 	async getGif(forced = false) {
-		return (await this.getJson(forced)).image;
+		const response = await this.getJson(forced);
+		console.log('YesnowtfApi response:', response);
+		return response.image;
 	}
 }
 
@@ -52,14 +54,14 @@ class TgApi {
 }
 
 function commandRollIntRange(max = 6, min = 1) {
-	if (!(max = parseInt(max)) || !(min = parseInt(min))) return 'Invalid command';
+	if (!(max = parseInt(max)) || !(min = parseInt(min))) return;
 	if (max < min) [max, min] = [min, max];
 	return `[${min},${max}] -> ` + (Math.floor(Math.random() * (max - min + 1)) + min);
 }
 
 async function handleRegularCommand(updateJson, tgApi) {
 	let commands = {
-		gif: 'Get a random GIF from yesno\\.wtf\\. ',
+		gif: 'Get a random GIF from yesno\\.wtf\\. ' + 'Optional arguments to specific GIF type: yes / no / maybe\\. ' + 'Example: `/gif yes`',
 		roll:
 			'Roll a random int in range\\. ' +
 			'Default is \\[1,6\\], one argument to change the max value, two arguments to change min and max\\. ' +
@@ -76,19 +78,31 @@ async function handleRegularCommand(updateJson, tgApi) {
 	const chatId = updateJson.message.chat.id;
 
 	const command = updateJson.message.text.split(/\s+/);
-	console.log('Command: ' + command);
+	console.log('Command:', command);
 
 	switch (command[0]) {
 		case '/start':
 		case '/help':
 			return await tgApi.sendRegularMessage(commands.help, chatId, 'MarkdownV2');
+
 		case '/gif':
-			return await tgApi.sendAnimation(await yesnowtfApi.getGif(), chatId);
+			const gifTypes = ['yes', 'no', 'maybe'];
+			let gifType = false;
+
+			if (command.length == 1) gifType = false;
+			else if (command.length == 2 && gifTypes.includes(command[1].toLowerCase())) gifType = command[1].toLowerCase();
+			else break;
+
+			return await tgApi.sendAnimation(await yesnowtfApi.getGif(gifType), chatId);
+
 		case '/roll':
-			return await tgApi.sendRegularMessage(commandRollIntRange(...command.slice(1).reverse()), chatId);
-		default:
-			return await tgApi.sendRegularMessage('Invalid command', chatId);
+			if (command.length > 3) break;
+
+			const text = commandRollIntRange(...command.slice(1).reverse());
+			if (text) return await tgApi.sendRegularMessage(text, chatId);
+			break;
 	}
+	return await tgApi.sendRegularMessage('Invalid command. Send /help for help', chatId);
 }
 
 export default {
@@ -96,10 +110,10 @@ export default {
 		const tgApi = new TgApi(env.TG_BOT_TOKEN);
 
 		const requestJson = await request.json();
-		console.log('Request: ', requestJson);
+		console.log('Request:', requestJson);
 
 		const messageType = tgApi.getUpdateType(requestJson);
-		console.log('Message type: ' + messageType);
+		console.log('Message type:' + messageType);
 		if (messageType !== 'message') return new Response();
 
 		console.log(await handleRegularCommand(requestJson, tgApi));
