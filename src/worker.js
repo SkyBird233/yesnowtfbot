@@ -2,8 +2,8 @@ class YesnowtfApi {
 	apiUrl = 'https://yesno.wtf/api';
 
 	async getJson(forced = false) {
-		//forced: yes / no / maybe
-		if (forced) this.apiUrl += '?force=' + forced;
+		const forceTypes = ['yes', 'no', 'maybe'];
+		if (forced && forceTypes.includes(forced)) this.apiUrl += '?force=' + forced;
 		return await fetch(this.apiUrl).then((response) => response.json());
 	}
 
@@ -24,7 +24,7 @@ class TgApi {
 		for (const key in updateJson) if (key !== 'update_id') return key;
 	}
 
-	async sendMessage(data, method = 'sendMessage') {
+	async send(data, method = 'sendMessage') {
 		const init = {
 			method: 'POST',
 			body: JSON.stringify(data),
@@ -35,13 +35,13 @@ class TgApi {
 		return await fetch(this.baseUrl + method, init).then((response) => response.json());
 	}
 
-	async sendRegularMessage(text, chatId, parse_mode = null) {
+	async sendRegularMessage(text, chatId, parseMode = null) {
 		const data = {
 			chat_id: chatId,
 			text: text,
 		};
-		if (parse_mode) data.parse_mode = parse_mode;
-		return await this.sendMessage(data);
+		if (parseMode) data.parse_mode = parseMode;
+		return await this.send(data);
 	}
 
 	async sendAnimation(animUrl, chatId) {
@@ -49,7 +49,39 @@ class TgApi {
 			chat_id: chatId,
 			animation: animUrl,
 		};
-		return await this.sendMessage(data, 'sendAnimation');
+		return await this.send(data, 'sendAnimation');
+	}
+
+	async answerInlineQuery(inlineQueryId, results, inlineQueryResultsButton = null) {
+		const data = {
+			inline_query_id: inlineQueryId,
+			results: results,
+			cache_time: 0,
+		};
+		if (inlineQueryResultsButton) data.button = inlineQueryResultsButton;
+		return await this.send(data, 'answerInlineQuery');
+	}
+
+	inlineQueryResultArticle(messageText, title, description = null, parseMode = null) {
+		const inputTextMessageContent = { message_text: messageText, ...(parseMode && { parse_mode: parseMode }) };
+		return {
+			type: 'article',
+			id: '0',
+			title: title,
+			input_message_content: inputTextMessageContent,
+			...(description && { description: description }),
+		};
+	}
+
+	inlineQueryResultGif(gifUrl) {
+		return {
+			type: 'gif',
+			id: '1',
+			gif_url: gifUrl,
+			thumbnail_url: 'https://yesno.wtf/assets/favicons/favicon-196x196-d7156a060e23907ce2dce339a7fef7df.png',
+			title: 'Title',
+			caption: 'Caption',
+		};
 	}
 }
 
@@ -105,6 +137,41 @@ async function handleRegularCommand(updateJson, tgApi) {
 	return await tgApi.sendRegularMessage('Invalid command. Send /help for help', chatId);
 }
 
+async function handleInlineQuery(updateJson, tgApi) {
+	const { id: inlineQueryId, query } = updateJson.inline_query;
+
+	const command = query.split(/\s+/);
+	console.log('Query command:', command);
+
+	switch (command[0]) {
+		case '':
+		case 'gif':
+			const yesnowtfApi = new YesnowtfApi();
+			const { answer, image } = await yesnowtfApi.getJson();
+			// subcommands: yes / no / maybe (show GIF directly)
+			return await tgApi.answerInlineQuery(inlineQueryId, [
+				tgApi.inlineQueryResultArticle(
+					`[${answer.charAt(0).toUpperCase() + answer.slice(1)}](${image})`,
+					'Get a random GIF',
+					'Not using GIF mode because it will leak the result',
+					'MarkdownV2'
+				),
+			]);
+
+		case 'roll':
+			if (command.length > 3) break;
+
+			const text = commandRollIntRange(...command.slice(1).reverse());
+			if (text)
+				return await tgApi.answerInlineQuery(inlineQueryId, [
+					tgApi.inlineQueryResultArticle(text, 'Roll a number in range ' + text.split(' -> ')[0], 'Example: roll 10 20'),
+				]);
+			break;
+	}
+
+	return await tgApi.answerInlineQuery(inlineQueryId, [tgApi.inlineQueryResultArticle('Not a valid command', 'Not a valid command')]);
+}
+
 export default {
 	async fetch(request, env, ctx) {
 		const tgApi = new TgApi(env.TG_BOT_TOKEN);
@@ -114,9 +181,8 @@ export default {
 
 		const messageType = tgApi.getUpdateType(requestJson);
 		console.log('Message type:' + messageType);
-		if (messageType !== 'message') return new Response();
-
-		console.log(await handleRegularCommand(requestJson, tgApi));
+		if (messageType == 'message') console.log(await handleRegularCommand(requestJson, tgApi));
+		else if (messageType == 'inline_query') console.log(await handleInlineQuery(requestJson, tgApi));
 
 		return new Response();
 	},
