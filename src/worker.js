@@ -62,25 +62,25 @@ class TgApi {
 		return await this.send(data, 'answerInlineQuery');
 	}
 
-	inlineQueryResultArticle(messageText, title, description = null, parseMode = null) {
+	inlineQueryResultArticle(messageText, title, description = null, id = 0, parseMode = null) {
 		const inputTextMessageContent = { message_text: messageText, ...(parseMode && { parse_mode: parseMode }) };
 		return {
 			type: 'article',
-			id: '0',
+			id: id,
 			title: title,
 			input_message_content: inputTextMessageContent,
 			...(description && { description: description }),
 		};
 	}
 
-	inlineQueryResultGif(gifUrl) {
+	inlineQueryResultGif(gifUrl, id = 0) {
 		return {
 			type: 'gif',
-			id: '1',
+			id: id,
 			gif_url: gifUrl,
-			thumbnail_url: 'https://yesno.wtf/assets/favicons/favicon-196x196-d7156a060e23907ce2dce339a7fef7df.png',
-			title: 'Title',
-			caption: 'Caption',
+			thumbnail_url: gifUrl,
+			//title: 'title',
+			//caption: 'Caption',
 		};
 	}
 }
@@ -105,6 +105,15 @@ async function handleRegularCommand(updateJson, tgApi) {
 			.map((key) => `/${key} \\- ${commands[key]}`)
 			.join('\n');
 
+	const inlineHelp =
+		'*Inline mode:*\n' +
+		'`gif` \\- Get a random GIF from yesno\\.wtf\\. ' +
+		'Optional arguments to specific GIF type: yes / no / maybe\\. ' +
+		'Example: `gif yes`\n' +
+		'`roll` \\- Roll a random int in range\\. ' +
+		'Default is \\[1,6\\], one argument to change the max value, two arguments to change min and max\\. ' +
+		'Example: `roll 10 20`\n';
+
 	const yesnowtfApi = new YesnowtfApi();
 
 	const chatId = updateJson.message.chat.id;
@@ -115,7 +124,7 @@ async function handleRegularCommand(updateJson, tgApi) {
 	switch (command[0]) {
 		case '/start':
 		case '/help':
-			return await tgApi.sendRegularMessage(commands.help, chatId, 'MarkdownV2');
+			return await tgApi.sendRegularMessage(commands.help + '\n\n' + inlineHelp, chatId, 'MarkdownV2');
 
 		case '/gif':
 			const gifTypes = ['yes', 'no', 'maybe'];
@@ -143,33 +152,66 @@ async function handleInlineQuery(updateJson, tgApi) {
 	const command = query.split(/\s+/);
 	console.log('Query command:', command);
 
+	async function urlGif() {
+		const yesnowtfApi = new YesnowtfApi();
+		const { answer, image } = await yesnowtfApi.getJson();
+		// subcommands: yes / no / maybe (show GIF directly)
+		return tgApi.inlineQueryResultArticle(
+			`[${answer.charAt(0).toUpperCase() + answer.slice(1)}](${image})`,
+			'Get a random GIF',
+			'Not using GIF mode here because it will leak the result.\nUse `gif [ yes / no / maybe ]` for GIF mode.',
+			1,
+			'MarkdownV2'
+		);
+	}
+
+	function roll(command) {
+		const text = commandRollIntRange(...command.slice(1).reverse());
+		if (text)
+			return tgApi.inlineQueryResultArticle(
+				text,
+				'Roll a number in range ' + text.split(' -> ')[0],
+				'\nType to preview the range.\nExample: `roll 10`, `roll 10 20`',
+				2
+			);
+	}
+
+	async function gif(command) {
+		const yesnowtfApi = new YesnowtfApi();
+		const gifTypes = ['yes', 'no', 'maybe'];
+		let gifType = false;
+
+		if (command.length == 1) gifType = false;
+		else if (command.length == 2 && gifTypes.includes(command[1].toLowerCase())) gifType = command[1].toLowerCase();
+		else return;
+
+		return tgApi.inlineQueryResultGif(await yesnowtfApi.getGif(gifType), 3);
+	}
+
+	let inlineQueries = [];
 	switch (command[0]) {
 		case '':
+			inlineQueries.push(await urlGif());
+
+			const rollResult = roll(['roll']);
+			rollResult.description = "\nType 'roll' for more info";
+			inlineQueries.push(rollResult);
+
+			break;
+
 		case 'gif':
-			const yesnowtfApi = new YesnowtfApi();
-			const { answer, image } = await yesnowtfApi.getJson();
-			// subcommands: yes / no / maybe (show GIF directly)
-			return await tgApi.answerInlineQuery(inlineQueryId, [
-				tgApi.inlineQueryResultArticle(
-					`[${answer.charAt(0).toUpperCase() + answer.slice(1)}](${image})`,
-					'Get a random GIF',
-					'Not using GIF mode because it will leak the result',
-					'MarkdownV2'
-				),
-			]);
+			if (command.length == 0) inlineQueries.push(await urlGif());
+			else if (command.length <= 2) inlineQueries.push(await gif(command));
+			break;
 
 		case 'roll':
-			if (command.length > 3) break;
-
-			const text = commandRollIntRange(...command.slice(1).reverse());
-			if (text)
-				return await tgApi.answerInlineQuery(inlineQueryId, [
-					tgApi.inlineQueryResultArticle(text, 'Roll a number in range ' + text.split(' -> ')[0], 'Example: roll 10 20'),
-				]);
+			if (command.length <= 3) inlineQueries.push(roll(command));
 			break;
 	}
 
-	return await tgApi.answerInlineQuery(inlineQueryId, [tgApi.inlineQueryResultArticle('Not a valid command', 'Not a valid command')]);
+	console.log('Inline queries:', inlineQueries);
+	if (inlineQueries.length) return await tgApi.answerInlineQuery(inlineQueryId, inlineQueries);
+	else return await tgApi.answerInlineQuery(inlineQueryId, [tgApi.inlineQueryResultArticle('Not a valid command', 'Not a valid command')]);
 }
 
 export default {
