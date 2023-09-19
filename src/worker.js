@@ -73,13 +73,13 @@ class TgApi {
 		};
 	}
 
-	inlineQueryResultGif(gifUrl, id = 0) {
+	inlineQueryResultGif(gifUrl, id = 0, title) {
 		return {
 			type: 'gif',
 			id: id,
 			gif_url: gifUrl,
 			thumbnail_url: gifUrl,
-			//title: 'title',
+			title: title,
 			//caption: 'Caption',
 		};
 	}
@@ -152,40 +152,44 @@ async function handleInlineQuery(updateJson, tgApi) {
 	const command = query.split(/\s+/);
 	console.log('Query command:', command);
 
-	async function urlGif() {
+	async function urlGif(id = 10) {
 		const yesnowtfApi = new YesnowtfApi();
 		const { answer, image } = await yesnowtfApi.getJson();
 		// subcommands: yes / no / maybe (show GIF directly)
 		return tgApi.inlineQueryResultArticle(
 			`[${answer.charAt(0).toUpperCase() + answer.slice(1)}](${image})`,
 			'Get a random GIF',
-			'Not using GIF mode here because it will leak the result.\nUse `gif [ yes / no / maybe ]` for GIF mode.',
-			1,
+			'No one knows the result before sending. Use `gif [ yes / no / maybe ]` for GIF mode.',
+			id,
 			'MarkdownV2'
 		);
 	}
 
-	function roll(command) {
+	function roll(command, id = 20) {
 		const text = commandRollIntRange(...command.slice(1).reverse());
 		if (text)
 			return tgApi.inlineQueryResultArticle(
 				text,
 				'Roll a number in range ' + text.split(' -> ')[0],
 				'\nType to preview the range.\nExample: `roll 10`, `roll 10 20`',
-				2
+				id
 			);
 	}
 
-	async function gif(command) {
+	async function gif(command = [], id = 30) {
 		const yesnowtfApi = new YesnowtfApi();
 		const gifTypes = ['yes', 'no', 'maybe'];
 		let gifType = false;
 
-		if (command.length == 1) gifType = false;
+		if (command.length <= 1) gifType = false;
 		else if (command.length == 2 && gifTypes.includes(command[1].toLowerCase())) gifType = command[1].toLowerCase();
 		else return;
 
-		return tgApi.inlineQueryResultGif(await yesnowtfApi.getGif(gifType), 3);
+		return tgApi.inlineQueryResultGif(
+			await yesnowtfApi.getGif(gifType),
+			id,
+			gifType ? gifType.charAt(0).toUpperCase() + gifType.slice(1) : 'Random GIF'
+		);
 	}
 
 	let inlineQueries = [];
@@ -196,6 +200,9 @@ async function handleInlineQuery(updateJson, tgApi) {
 			const rollResult = roll(['roll']);
 			rollResult.description = "\nType 'roll' for more info";
 			inlineQueries.push(rollResult);
+
+			inlineQueries.push(await gif(['', 'yes'], 30));
+			inlineQueries.push(await gif(['', 'no'], 31));
 
 			break;
 
